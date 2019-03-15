@@ -7,7 +7,10 @@
 
 #include "hilevel.h"
 
-pcb_t pcb[ 2 ]; pcb_t* current = NULL;
+//max 2 processes
+pcb_t pcb[2];
+pcb_t* current = NULL;
+int process_count = 0;
 
 void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
 
@@ -31,44 +34,78 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
 }
 
 void schedule( ctx_t* ctx ) {
-  if     ( current->pid == pcb[ 0 ].pid ) {
-    dispatch( ctx, &pcb[ 0 ], &pcb[ 1 ] );      // context switch P_1 -> P_2
+  pcb_t* prev = current;
+  pcb_t* next = current;
 
-    pcb[ 0 ].status = STATUS_READY;             // update   execution status  of P_1
-    pcb[ 1 ].status = STATUS_EXECUTING;         // update   execution status  of P_2
+  //get previous process and process with highest score
+  int maxScore = 0;
+  for(int i=0; i<process_count; i++){
+
+    //if last executed process
+    if(current->pid == pcb[i].pid){
+      prev = &pcb[i];
+    }
+
+    int score = pcb[i].age + pcb[i].priority;
+    if(maxScore <= score){
+      next = &pcb[i];
+      maxScore = score;
+    }
   }
-  else if( current->pid == pcb[ 1 ].pid ) {
-    dispatch( ctx, &pcb[ 1 ], &pcb[ 0 ] );      // context switch P_2 -> P_1
 
-    pcb[ 1 ].status = STATUS_READY;             // update   execution status  of P_2
-    pcb[ 0 ].status = STATUS_EXECUTING;         // update   execution status  of P_1
+  //increase age of all processes not executing
+  for(int i=0; i<process_count; i++){
+    if(next->pid != pcb[i].pid){
+      pcb[i].age += 1;
+    }
+    else{
+      pcb[i].age = 0;
+
+    }
   }
-
+  dispatch( ctx, prev, next);
   return;
+
 }
 
 extern void     main_P3();
 extern uint32_t tos_P3;
 extern void     main_P4();
 extern uint32_t tos_P4;
+extern void     main_P5();
+extern uint32_t tos_P5;
 
 void hilevel_handler_rst( ctx_t* ctx ) {
+  PL011_putc( UART0, '[', true );
   PL011_putc( UART0, 'R', true );
+  PL011_putc( UART0, 'E', true );
+  PL011_putc( UART0, 'S', true );
+  PL011_putc( UART0, 'E', true );
+  PL011_putc( UART0, 'T', true );
+  PL011_putc( UART0, ']', true );
 
   //init user processes
   memset( &pcb[ 0 ], 0, sizeof( pcb_t ) );     // initialise 0-th PCB = P_3
-  pcb[ 0 ].pid      = 1;
+  pcb[ 0 ].pid      = 3;
   pcb[ 0 ].status   = STATUS_CREATED;
   pcb[ 0 ].ctx.cpsr = 0x50;
   pcb[ 0 ].ctx.pc   = ( uint32_t )( &main_P3 );
   pcb[ 0 ].ctx.sp   = ( uint32_t )( &tos_P3  );
+  pcb[ 0 ].priority      = 5;
+  pcb[ 0 ].age      = 0;
+
+  process_count+=1;
 
   memset( &pcb[ 1 ], 0, sizeof( pcb_t ) );     // initialise 1-st PCB = P_4
-  pcb[ 1 ].pid      = 2;
+  pcb[ 1 ].pid      = 4;
   pcb[ 1 ].status   = STATUS_CREATED;
   pcb[ 1 ].ctx.cpsr = 0x50;
   pcb[ 1 ].ctx.pc   = ( uint32_t )(&main_P4);
   pcb[ 1 ].ctx.sp   = ( uint32_t )(&tos_P4);
+  pcb[ 1].priority      = 1;
+  pcb[ 1 ].age      = 0;
+  process_count+=1;
+
 
   //start executing P3
   dispatch( ctx, NULL, &pcb[ 0 ] );
@@ -86,9 +123,6 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   GICD0->CTLR         = 0x00000001; // enable GIC distributor
 
   int_enable_irq();
-
-
-
   return;
 }
 
@@ -100,7 +134,13 @@ void hilevel_handler_irq(ctx_t* ctx) {
   // Step 4: handle the interrupt, then clear (or reset) the source.
 
   if( id == GIC_SOURCE_TIMER0 ) {
+    PL011_putc( UART0, '[', true );
     PL011_putc( UART0, 'T', true );
+    PL011_putc( UART0, 'I', true );
+    PL011_putc( UART0, 'M', true );
+    PL011_putc( UART0, 'E', true );
+    PL011_putc( UART0, 'R', true );
+    PL011_putc( UART0, ']', true );
     schedule(ctx);
     TIMER0->Timer1IntClr = 0x01;
   }
