@@ -14,6 +14,7 @@ SECTIONS {
   .data : {                         *(.data        ) }
   /* place bss  segment(s)           */
   .bss  : {                         *(.bss         ) }
+  .heap : {end    = .;_heap_start = .;.             = . + 0x00001000;_heap_end    = .;}
   /* align       address (per AAPCS) */
   .       = ALIGN( 8 );
 
@@ -25,11 +26,8 @@ SECTIONS {
   .       = . + 0x00001000;
   tos_svc = .;
 
-  /* allocate stack for P3           */
+  /* allocate stack for Console           */
   .       = . + 0x00001000;
-  tos_P3  = .;
+  tos_console  = .;
 
-  /* allocate stack for P4           */
-  .       = . + 0x00001000;
-  tos_P4  = .;
 }
