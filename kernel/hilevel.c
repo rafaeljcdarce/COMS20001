@@ -7,8 +7,8 @@
 
 #include "hilevel.h"
 
-//max 4 (e)
-pcb_t pcb[4];
+//max 4 including console
+pcb_t pcb[16];
 pcb_t* current = NULL;
 int process_count = 0;
 
@@ -30,58 +30,61 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   PL011_putc( UART0, '0' + next->pid, true );
   PL011_putc( UART0, ']', true );
 
+  prev->status = STATUS_READY;
+  next->status = STATUS_EXECUTING;
   return;
+}
+
+pcb_t* getNextPCB (){
+  for(int i=0; i<16; i++){
+    if(pcb[i].status == STATUS_TERMINATED) return &pcb[i];
+  }
+  return NULL;
 }
 
 void schedule( ctx_t* ctx ) {
   pcb_t* prev = current;
   pcb_t* next = current;
-
   //get previous process and process with highest score
   int maxScore = 0;
-  for(int i=0; i<process_count; i++){
-
+  for(int i=0; i<16; i++){
+    if(pcb[i].status != STATUS_TERMINATED){
     //if last executed process
-    if(current->pid == pcb[i].pid){
-      prev = &pcb[i];
-    }
+      if(current->pid == pcb[i].pid){
+        prev = &pcb[i];
+      }
 
-    int score = pcb[i].age + pcb[i].priority;
-    if(maxScore <= score){
-      next = &pcb[i];
-      maxScore = score;
+      int score = pcb[i].age + pcb[i].priority;
+      if(maxScore <= score){
+        next = &pcb[i];
+        maxScore = score;
+      }
     }
   }
-
-  //increase age of all processes not executing
+  //increase age of all processes not executing, reset currents
   for(int i=0; i<process_count; i++){
-    if(next->pid != pcb[i].pid){
-      pcb[i].age += 1;
-    }
-    else{
-      pcb[i].age = 0;
-
+    if(pcb[i].status != STATUS_TERMINATED){
+      if(next->pid != pcb[i].pid){
+        pcb[i].age += 1;
+      }
+      else{
+        pcb[i].age = 0;
+      }
     }
   }
   dispatch( ctx, prev, next);
   return;
-
 }
 
 extern void     main_console();
-extern uint32_t tos_console;
-extern uint32_t tos_1;
-extern uint32_t tos_2;
-extern uint32_t tos_3;
+extern uint32_t tos_user;
 
 
 
 
 void hilevel_handler_rst( ctx_t* ctx ) {
-    
-    
 
-    PL011_putc( UART0, '[', true );
+  PL011_putc( UART0, '[', true );
   PL011_putc( UART0, 'R', true );
   PL011_putc( UART0, 'E', true );
   PL011_putc( UART0, 'S', true );
@@ -90,19 +93,31 @@ void hilevel_handler_rst( ctx_t* ctx ) {
 
   PL011_putc( UART0, ']', true );
 
-    
-//   create_process(( uint32_t )(&main_console), ( uint32_t )(&tos_console), 1);
-
-  memset( &pcb[ 0 ], 0, sizeof( pcb_t ) );     // initialise 1-st PCB = console
+// create console process
+  memset( &pcb[ 0 ], 0, sizeof( pcb_t ) );
   pcb[ 0 ].pid      = 1;
   pcb[ 0 ].status   = STATUS_CREATED;
   pcb[ 0 ].ctx.cpsr = 0x50;
   pcb[ 0 ].ctx.pc   = ( uint32_t )(&main_console);
-  pcb[ 0 ].ctx.sp   = ( uint32_t )(&tos_console);
+  pcb[ 0 ].ctx.sp   = ( uint32_t )(&tos_user);
+  pcb[ 0 ].tos   = ( uint32_t )(&tos_user);
   pcb[ 0].priority      = 1;
   pcb[ 0 ].age      = 0;
   process_count+=1;
-    
+
+  //allocate all other PCBs as empty
+  for(int i = 1; i < 16; i ++){
+    memset( &pcb[ i ], 0, sizeof( pcb_t ) );
+    pcb[ i].pid      = i+1;
+    pcb[ i ].status   = STATUS_TERMINATED;
+    pcb[ i ].ctx.cpsr = 0x50;
+    pcb[ i ].ctx.sp   = ( uint32_t )(&tos_user) - (i*0x00001000);
+    pcb[ i ].tos   = pcb[ i ].ctx.sp;
+    pcb[ i].priority      = 1;
+    pcb[ i ].age      = 0;
+    process_count+=1;
+  }
+
   //start executing console
   dispatch( ctx, NULL, &pcb[ 0 ] );
 
@@ -150,7 +165,7 @@ void hilevel_handler_irq(ctx_t* ctx) {
 
 void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 
-    
+
 // #define SYS_YIELD     ( 0x00 )
 // #define SYS_WRITE     ( 0x01 )
 // #define SYS_READ      ( 0x02 )
@@ -164,8 +179,8 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
       schedule( ctx );
       break;
     }
-          
-          
+
+
 
     case 0x01 : { // 0x01 => write( fd, x, n )
       int   fd = ( int   )( ctx->gpr[ 0 ] );
@@ -180,7 +195,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 
       break;
     }
-          
+
     case 0x03 :{//FORK
         PL011_putc( UART0, '[', true );
         PL011_putc( UART0, 'F', true );
@@ -188,33 +203,38 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
         PL011_putc( UART0, 'R', true );
         PL011_putc( UART0, 'K', true );
         PL011_putc( UART0, ']', true );
-      
-        //allocate new PCB and clone parent
-        memset( &pcb[process_count], 0, sizeof( pcb_t ) );
-        memcpy( &pcb[process_count], &current, sizeof( pcb_t ) );
 
-        //get next available stack, clone the parents contents and update SP to same offset
-        
-        
-        memcpy( &tos_1 - 0x00001000, &tos_console - 0x00001000, 0x00001000 );
+        //get next PCB
+        pcb_t* child = getNextPCB();
 
-        //clone parent PCB and give unique ID
-        memcpy( &pcb[process_count], &pcb[0], sizeof( pcb_t ) );
-        pcb[ process_count ].pid      = process_count;
+        //no PCBs left
+        if(child == NULL) break;
 
-        //set child return value to 0, and the parent's to the childs PID
-        pcb[process_count].ctx.gpr[0]=0;
-        ctx->gpr[ 0 ] = pcb[ process_count ].pid;
+        //activate PCB
+        child->status = STATUS_CREATED;
+        memcpy(&child->ctx, &ctx, sizeof(ctx_t));
+        child->ctx.sp = child->tos + (ctx->sp - current->tos);
+        memcpy(&child->ctx.sp, &ctx->sp, (ctx->sp - current->tos));
 
-        //set childs SP to same offset as parents SP
-        pcb[ process_count ].ctx.sp   = (uint32_t) ((&tos_child - 0x00001000) + (ctx->sp - (uint32_t)(&tos_console - 0x00001000)));
+        //set return values
+        child->ctx.gpr[0] = 0;
+        ctx->gpr[0] = child->pid;
 
-        process_count+=1;     
         break;
     }
 
-        
-    case 0x05 :{//EXEC    
+
+    case 0x05 :{//EXEC
+      PL011_putc( UART0, '[', true );
+      PL011_putc( UART0, 'E', true );
+      PL011_putc( UART0, 'X', true );
+      PL011_putc( UART0, 'E', true );
+      PL011_putc( UART0, 'C', true );
+      PL011_putc( UART0, ']', true );
+      //set return values
+      ctx->pc = ctx->gpr[0];
+      //current->ctx.sp = current.tos;
+      //dispatch(ctx, current, current);
       break;
     }
 

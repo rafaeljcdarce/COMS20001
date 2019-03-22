@@ -26,19 +26,9 @@ SECTIONS {
   .       = . + 0x00001000;
   tos_svc = .;
 
-  /* allocate stack for Console           */
-  .       = . + 0x00001000;
-  tos_console  = .;
-  
-  /* pre-allocated stacks for 3 user programs */
-  .       = . + 0x00001000;
-  tos_1  = .;
-
-  .       = . + 0x00001000;
-  tos_2  = .;
-
-  .       = . + 0x00001000;
-  tos_3  = .;
+  /* pre-allocated stacks for user programs (16 stacks worth)*/
+  .       = . + 0x00010000;
+  tos_user  = .;
 
 
 }
