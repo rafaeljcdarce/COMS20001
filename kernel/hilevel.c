@@ -7,8 +7,8 @@
 
 #include "hilevel.h"
 
-//max 2 processes
-pcb_t pcb[2];
+//max 4 (e)
+pcb_t pcb[4];
 pcb_t* current = NULL;
 int process_count = 0;
 
@@ -23,12 +23,12 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
 
   current = next;                             // update   executing index   to P_{next}
 
-//   PL011_putc( UART0, '[', true );
-//   PL011_putc( UART0, '0' + prev->pid, true );
-//   PL011_putc( UART0, '-', true );
-//   PL011_putc( UART0, '>', true );
-//   PL011_putc( UART0, '0' + next->pid, true );
-//   PL011_putc( UART0, ']', true );
+  PL011_putc( UART0, '[', true );
+  PL011_putc( UART0, '0' + prev->pid, true );
+  PL011_putc( UART0, '-', true );
+  PL011_putc( UART0, '>', true );
+  PL011_putc( UART0, '0' + next->pid, true );
+  PL011_putc( UART0, ']', true );
 
   return;
 }
@@ -70,55 +70,30 @@ void schedule( ctx_t* ctx ) {
 
 extern void     main_console();
 extern uint32_t tos_console;
-extern void     main_P3();
+extern uint32_t tos_1;
+extern uint32_t tos_2;
+extern uint32_t tos_3;
 
-pcb_t* create_process (uint32_t pc, uint32_t sp, int priority){
-  memset( &pcb[ process_count ], 0, sizeof( pcb_t ) );     // initialise 0-th PCB = P_3
-  pcb[ process_count ].pid      = process_count;
-  pcb[ process_count ].status   = STATUS_CREATED;
-  pcb[ process_count ].ctx.cpsr = 0x50;
-  pcb[ process_count ].ctx.pc   = pc;
-  pcb[ process_count ].ctx.sp   = sp;
-  pcb[ process_count ].priority = priority;
-  pcb[ process_count ].age      = 0;
-  process_count+=1;
-  return &pcb[process_count-1];
 
-}
-
-pcb_t* fork_process (ctx_t* ctx, uint32_t sp, int priority){
-  memset( &pcb[ process_count ], 0, sizeof( pcb_t ) );     // initialise 0-th PCB = P_3
-  pcb[ process_count ].pid      = process_count;
-  pcb[ process_count ].status   = STATUS_EXECUTING;
-  pcb[ process_count ].ctx = *ctx;
-  pcb[ process_count ].ctx.sp   = sp;
-  pcb[ process_count ].ctx.gpr[ 0 ] = 0;
-
-  pcb[ process_count ].priority = priority;
-  pcb[ process_count ].age      = 0;
-  process_count+=1;
-  return &pcb[process_count-1];
-
-}
 
 
 void hilevel_handler_rst( ctx_t* ctx ) {
     
     
 
-//     PL011_putc( UART0, '[', true );
-//   PL011_putc( UART0, 'R', true );
-//   PL011_putc( UART0, 'E', true );
-//   PL011_putc( UART0, 'S', true );
-//   PL011_putc( UART0, 'E', true );
-//   PL011_putc( UART0, 'T', true );
+    PL011_putc( UART0, '[', true );
+  PL011_putc( UART0, 'R', true );
+  PL011_putc( UART0, 'E', true );
+  PL011_putc( UART0, 'S', true );
+  PL011_putc( UART0, 'E', true );
+  PL011_putc( UART0, 'T', true );
 
-//   PL011_putc( UART0, ']', true );
+  PL011_putc( UART0, ']', true );
 
     
 //   create_process(( uint32_t )(&main_console), ( uint32_t )(&tos_console), 1);
 
-  memset( &pcb[ 0 ], 0, sizeof( pcb_t ) );     // initialise 1-st PCB = P_4
+  memset( &pcb[ 0 ], 0, sizeof( pcb_t ) );     // initialise 1-st PCB = console
   pcb[ 0 ].pid      = 1;
   pcb[ 0 ].status   = STATUS_CREATED;
   pcb[ 0 ].ctx.cpsr = 0x50;
@@ -127,7 +102,8 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   pcb[ 0].priority      = 1;
   pcb[ 0 ].age      = 0;
   process_count+=1;
-  //start executing P3
+    
+  //start executing console
   dispatch( ctx, NULL, &pcb[ 0 ] );
 
   //Enable timer interrupts
@@ -206,15 +182,39 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
     }
           
     case 0x03 :{//FORK
-      uint32_t* sp = ( uint32_t* )( malloc( 0x00001000) );
-      pcb_t* child = fork_process(ctx, ( uint32_t )(&sp), 5);
-      ctx->gpr[ 0 ] = child->pid;
-      break;
+        PL011_putc( UART0, '[', true );
+        PL011_putc( UART0, 'F', true );
+        PL011_putc( UART0, 'O', true );
+        PL011_putc( UART0, 'R', true );
+        PL011_putc( UART0, 'K', true );
+        PL011_putc( UART0, ']', true );
+      
+        //allocate new PCB and clone parent
+        memset( &pcb[process_count], 0, sizeof( pcb_t ) );
+        memcpy( &pcb[process_count], &current, sizeof( pcb_t ) );
+
+        //get next available stack, clone the parents contents and update SP to same offset
+        
+        
+        memcpy( &tos_1 - 0x00001000, &tos_console - 0x00001000, 0x00001000 );
+
+        //clone parent PCB and give unique ID
+        memcpy( &pcb[process_count], &pcb[0], sizeof( pcb_t ) );
+        pcb[ process_count ].pid      = process_count;
+
+        //set child return value to 0, and the parent's to the childs PID
+        pcb[process_count].ctx.gpr[0]=0;
+        ctx->gpr[ 0 ] = pcb[ process_count ].pid;
+
+        //set childs SP to same offset as parents SP
+        pcb[ process_count ].ctx.sp   = (uint32_t) ((&tos_child - 0x00001000) + (ctx->sp - (uint32_t)(&tos_console - 0x00001000)));
+
+        process_count+=1;     
+        break;
     }
 
         
     case 0x05 :{//EXEC    
-      ctx->pc = ( uint32_t )(&main_P3);
       break;
     }
 

@@ -96,7 +96,8 @@ void main_console() {
       pid_t pid = fork();
 
       if( 0 == pid ) {
-        exec( load( strtok( NULL, " " ) ) );
+        p = strtok( NULL, " " );
+        exec( load( p ) );
       }
     } 
     else if( 0 == strcmp( p, "terminate" ) ) {
