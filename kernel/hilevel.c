@@ -7,7 +7,7 @@
 
 #include "hilevel.h"
 
-//max 4 including console
+//max 16 including console
 pcb_t pcb[16];
 pcb_t* current = NULL;
 int process_count = 0;
@@ -207,14 +207,23 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
         //get next PCB
         pcb_t* child = getNextPCB();
 
-        //no PCBs left
-        if(child == NULL) break;
+        //if there no available PCBs, return and do nothing
+        if(child == NULL){
+            ctx->gpr[0] = current->pid;
+            break;
+        } 
+        
+        //clone parents processing context
+        memcpy(&child->ctx, ctx, sizeof(ctx_t));
+
 
         //activate PCB
         child->status = STATUS_CREATED;
-        memcpy(&child->ctx, &ctx, sizeof(ctx_t));
-        child->ctx.sp = child->tos + (ctx->sp - current->tos);
-        memcpy(&child->ctx.sp, &ctx->sp, (ctx->sp - current->tos));
+        
+        //clone parent stack and SP in child
+        uint32_t sp_offset = (uint32_t) &current->tos - ctx->sp;
+        child->ctx.sp = child->tos - sp_offset;
+        memcpy((void *)child->ctx.sp, (void *)ctx->sp, sp_offset);
 
         //set return values
         child->ctx.gpr[0] = 0;
