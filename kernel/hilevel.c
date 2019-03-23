@@ -42,6 +42,13 @@ pcb_t* getNextPCB (){
   return NULL;
 }
 
+pcb_t* getPCB (pid_t pid){
+  for(int i=0; i<16; i++){
+    if(pcb[i].pid == pid) return &pcb[i];
+  }
+  return NULL;
+}
+
 void schedule( ctx_t* ctx ) {
   pcb_t* prev = current;
   pcb_t* next = current;
@@ -246,6 +253,19 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
       //dispatch(ctx, current, current);
       break;
     }
+    case 0x06 :{//KILL
+      PL011_putc( UART0, '[', true );
+      PL011_putc( UART0, 'K', true );
+      PL011_putc( UART0, 'I', true );
+      PL011_putc( UART0, 'L', true );
+      PL011_putc( UART0, 'L', true );
+      PL011_putc( UART0, ']', true );
+
+      pcb_t* target = getPCB((pid_t)ctx->gpr[0]);
+      if(target!=NULL) target->status = STATUS_TERMINATED;
+      break;
+    }
+         
 
     default   : { // 0x?? => unknown/unsupported
       break;
