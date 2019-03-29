@@ -24,13 +24,13 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   current = next;                             // update   executing index   to P_{next}
 
   PL011_putc( UART0, '[', true );
-  PL011_putc( UART0, '0' + prev->pid, true );
+  PL011_putc( UART0, 'A' + prev->pid, true );
   PL011_putc( UART0, '-', true );
   PL011_putc( UART0, '>', true );
-  PL011_putc( UART0, '0' + next->pid, true );
+  PL011_putc( UART0, 'A' + next->pid, true );
   PL011_putc( UART0, ']', true );
 
-  prev->status = STATUS_READY;
+  if(prev->status == STATUS_EXECUTING) prev->status = STATUS_READY;
   next->status = STATUS_EXECUTING;
   return;
 }
@@ -102,7 +102,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
 
 // create console process
   memset( &pcb[ 0 ], 0, sizeof( pcb_t ) );
-  pcb[ 0 ].pid      = 1;
+  pcb[ 0 ].pid      = 0;
   pcb[ 0 ].status   = STATUS_CREATED;
   pcb[ 0 ].ctx.cpsr = 0x50;
   pcb[ 0 ].ctx.pc   = ( uint32_t )(&main_console);
@@ -115,7 +115,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   //allocate all other PCBs as empty
   for(int i = 1; i < 20; i ++){
     memset( &pcb[ i ], 0, sizeof( pcb_t ) );
-    pcb[ i].pid      = i+1;
+    pcb[ i].pid      = i;
     pcb[ i ].status   = STATUS_TERMINATED;
     pcb[ i ].ctx.cpsr = 0x50;
     pcb[ i ].ctx.sp   = ( uint32_t )(&tos_user) - (i*0x00001000);
@@ -218,15 +218,15 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
         if(child == NULL){
 //            ctx->gpr[0] = current->pid;
             break;
-        } 
-        
+        }
+
         //clone parents processing context
         memcpy(&child->ctx, ctx, sizeof(ctx_t));
 
 
         //activate PCB
         child->status = STATUS_CREATED;
-        
+
         //clone parent stack and SP in child
         uint32_t sp_offset = (uint32_t) &current->tos - ctx->sp;
         child->ctx.sp = child->tos - sp_offset;
@@ -239,17 +239,19 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
         break;
     }
 
-      case 0x04:{//EXIT
-          PL011_putc( UART0, '[', true );
-          PL011_putc( UART0, 'E', true );
-          PL011_putc( UART0, 'X', true );
-          PL011_putc( UART0, 'I', true );
-          PL011_putc( UART0, 'T', true );
-          PL011_putc( UART0, ']', true );
-          pcb_t* target = getPCB((pid_t)ctx->gpr[0]);
-          if(target!=NULL) target->status = STATUS_TERMINATED;
-          break;
-      }
+    case 0x04:{//EXIT
+        PL011_putc( UART0, '[', true );
+        PL011_putc( UART0, 'E', true );
+        PL011_putc( UART0, 'X', true );
+        PL011_putc( UART0, 'I', true );
+        PL011_putc( UART0, 'T', true );
+        PL011_putc( UART0, ']', true );
+        pcb_t* target = getPCB(current->pid);
+        if(target!=NULL) target->status = STATUS_TERMINATED;
+        schedule(ctx);
+
+        break;
+    }
 
     case 0x05 :{//EXEC
       PL011_putc( UART0, '[', true );
@@ -276,7 +278,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
       if(target!=NULL) target->status = STATUS_TERMINATED;
       break;
     }
-         
+
 
     default   : { // 0x?? => unknown/unsupported
       break;

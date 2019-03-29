@@ -4,8 +4,7 @@ int chopsticks[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 int chopstick_lock = 1;
 
 int getLeftChopstick(int id){
-    if(id == 0) return 15;
-    return id-1;
+    return id;
 }
 
 int getRightChopstick(int id){
@@ -13,64 +12,71 @@ int getRightChopstick(int id){
     return id+1;
 }
 
-void eatDinner (char id){
-    
-}
+
 void main_dinner (){
-    int id = 0;
-    //init all other philosophers as child processes
-    for(int i = 1; i<16; i++){
-        
-        //child branch
+
+    //create child processes (the philosophers)
+    for(int i = 0; i<16; i++){
+
         if(fork() == 0){
-            
-            //give unique letter as id to each philosopher
-            id = i;
-            break;
-            
+
+            //give unique id to each philosopher
+            int id = i;
+
+            //solution to dining philosophers problem
+            while(1){
+
+                char p[2];
+                itoa(p, id);
+
+                sleep(id);
+
+                write( STDOUT_FILENO, "Philosopher ", 12);
+                write( STDOUT_FILENO, p, 2);
+                write( STDOUT_FILENO, " is waiting\n", 12 );
+
+
+
+                //wait for chopstick lock
+                sem_wait(&chopstick_lock);
+
+                int l = getLeftChopstick(id);
+                int r = getRightChopstick(id);
+
+                //only pick up chopsticks if both are available together
+                if(chopsticks[l] == 1 && chopsticks[r] == 1){
+                  sem_wait(&chopsticks[r]);
+                  sem_wait(&chopsticks[l]);
+                  sem_post(&chopstick_lock);
+                }
+                else{//keep waiting else
+                  sem_post(&chopstick_lock);
+                  continue;
+                }
+
+                write( STDOUT_FILENO, "Philosopher ",12);
+                write( STDOUT_FILENO, p, 2);
+                write( STDOUT_FILENO, " picked up both chopsticks\n", 27 );
+
+                //eat food
+                sleep(id);
+
+                write( STDOUT_FILENO, "Philosopher ", 12);
+                write( STDOUT_FILENO, p, 2);
+                write( STDOUT_FILENO, " finished their meal\n", 21 );
+
+                //put both chopsticks down, release lock, and break out of loop
+                sem_wait(&chopstick_lock);
+                sem_post(&chopsticks[r]);
+                sem_post(&chopsticks[l]);
+                sem_post(&chopstick_lock);
+
+                write( STDOUT_FILENO, "Philosopher ", 12);
+                write( STDOUT_FILENO, p, 2);
+                write( STDOUT_FILENO, " put down both chopsticks\n", 26 );
+            }
+
         }
     }
-    
-    //solution to dining philosophers problem
-    while(1){
-
-        write( STDOUT_FILENO, 'A', 2 );
-
-        //wait for chopstick lock
-        sem_wait(&chopstick_lock);
-
-        int l = getLeftChopstick(id);
-        int r = getRightChopstick(id);
-
-        //if right chopstick not available: release lock and keep waiting
-        if(chopsticks[r] == 0){
-            sem_post(&chopstick_lock);
-            continue;
-        }
-        else{//left is available: pick up
-            chopsticks[r] == 0;            
-        }
-        
-        //if right chopstick not available: release chopsticks and lock, and keep waiting
-        if(chopsticks[l] == 0){
-            chopsticks[r] == 1;
-            sem_post(&chopstick_lock);
-            continue;
-        }
-        else{//right is also available: pick up
-            chopsticks[r] == 0;            
-        }
-    
-        //eat food
-        
-        //put both chopsticks down, release lock, and break out of loop
-        chopsticks[r] == 1;
-        chopsticks[l] == 1;
-        sem_post(&chopstick_lock);
-        break;
-
-    }
-            
-    //terminate-self after eating all food
     exit( EXIT_SUCCESS );
 }
