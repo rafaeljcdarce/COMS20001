@@ -7,8 +7,8 @@
 
 #include "hilevel.h"
 
-//max 16 including console
-pcb_t pcb[16];
+//max 20 including console
+pcb_t pcb[20];
 pcb_t* current = NULL;
 int process_count = 0;
 
@@ -36,14 +36,14 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
 }
 
 pcb_t* getNextPCB (){
-  for(int i=0; i<16; i++){
+  for(int i=0; i<20; i++){
     if(pcb[i].status == STATUS_TERMINATED) return &pcb[i];
   }
   return NULL;
 }
 
 pcb_t* getPCB (pid_t pid){
-  for(int i=0; i<16; i++){
+  for(int i=0; i<20; i++){
     if(pcb[i].pid == pid) return &pcb[i];
   }
   return NULL;
@@ -54,7 +54,7 @@ void schedule( ctx_t* ctx ) {
   pcb_t* next = current;
   //get previous process and process with highest score
   int maxScore = 0;
-  for(int i=0; i<16; i++){
+  for(int i=0; i<20; i++){
     if(pcb[i].status != STATUS_TERMINATED){
     //if last executed process
       if(current->pid == pcb[i].pid){
@@ -113,7 +113,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   process_count+=1;
 
   //allocate all other PCBs as empty
-  for(int i = 1; i < 16; i ++){
+  for(int i = 1; i < 20; i ++){
     memset( &pcb[ i ], 0, sizeof( pcb_t ) );
     pcb[ i].pid      = i+1;
     pcb[ i ].status   = STATUS_TERMINATED;
@@ -216,7 +216,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 
         //if there no available PCBs, return and do nothing
         if(child == NULL){
-            ctx->gpr[0] = current->pid;
+//            ctx->gpr[0] = current->pid;
             break;
         } 
         
@@ -239,6 +239,17 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
         break;
     }
 
+      case 0x04:{//EXIT
+          PL011_putc( UART0, '[', true );
+          PL011_putc( UART0, 'E', true );
+          PL011_putc( UART0, 'X', true );
+          PL011_putc( UART0, 'I', true );
+          PL011_putc( UART0, 'T', true );
+          PL011_putc( UART0, ']', true );
+          pcb_t* target = getPCB((pid_t)ctx->gpr[0]);
+          if(target!=NULL) target->status = STATUS_TERMINATED;
+          break;
+      }
 
     case 0x05 :{//EXEC
       PL011_putc( UART0, '[', true );

@@ -26,8 +26,8 @@ SECTIONS {
   .       = . + 0x00001000;
   tos_svc = .;
 
-  /* pre-allocated stacks for user programs (16 stacks worth)*/
-  .       = . + 0x00010000;
+  /* pre-allocated stacks for user programs (20 stacks worth)*/
+  .       = . + 0x00014000;
   tos_user  = .;
 
 

@@ -148,3 +148,36 @@ void nice( int pid, int x ) {
 
   return;
 }
+
+void sem_wait(int x ) {
+    asm volatile("ldrex r1, [ %0 ] \n"//s'= MEM[ &s ]
+                 "cmp    r1, #0 \n"//s'?= 0
+                 "beq    sem_wait \n"//if s'== 0, retry
+                 "sub    r1, r1, #1 \n"//s'= s'- 1
+                 "strex r2, r1, [ %0 ] \n"//r <= MEM[ &s ] = s'
+                 "cmp    r2, #0 \n"// r  ?= 0
+                 "bne    sem_wait \n"//if r  != 0, retry
+                 "dmb \n"//memory barrier
+                 "bx     lr \n"//return
+                 :
+                 :"r" (x)
+                 :"r0", "r1", "r2");
+
+  return;
+}
+
+void sem_post (int x ) {
+    asm volatile("ldrex r1, [ %0 ] \n"//s'= MEM[ &s ]
+                 "add    r1, r1, #1 \n"//s'= s'+ 1
+                 "strex r2, r1, [ %0 ] \n"//r <= MEM[ &s ] = s'
+                 "cmp    r2, #0 \n"// r  ?= 0
+                 "bne    sem_post \n"//if r  != 0, retry
+                 "dmb \n"//memory barrier
+                 "bx     lr \n"//return
+                 :
+                 :"r" (x)
+                 :"r0", "r1", "r2");
+
+  return;
+}
+
