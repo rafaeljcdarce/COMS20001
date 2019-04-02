@@ -40,6 +40,7 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
 
     
   //printContextSwitch(prev->pid, next->pid);
+    PL011_putc( UART0, '\n', true );
 
 
   if(prev->status == STATUS_EXECUTING) prev->status = STATUS_READY;
@@ -120,7 +121,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   pcb[ 0 ].ctx.pc   = ( uint32_t )(&main_console);
   pcb[ 0 ].ctx.sp   = ( uint32_t )(&tos_user);
   pcb[ 0 ].tos   = ( uint32_t )(&tos_user);
-  pcb[ 0].priority      = 1;
+  pcb[ 0].priority      = 2;
   pcb[ 0 ].age      = 0;
   process_count+=1;
 
@@ -132,7 +133,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
     pcb[ i ].ctx.cpsr = 0x50;
     pcb[ i ].ctx.sp   = ( uint32_t )(&tos_user) - (i*0x00001000);
     pcb[ i ].tos   = pcb[ i ].ctx.sp;
-    pcb[ i].priority      = 32;
+    pcb[ i].priority      = 1;
     pcb[ i ].age      = 0;
     process_count+=1;
   }
@@ -181,6 +182,12 @@ void hilevel_handler_irq(ctx_t* ctx) {
 
   return;
 }
+void print_to_console( char* x, int n ) {
+  for( int i = 0; i < n; i++ ) {
+    PL011_putc( UART1, x[ i ], true );
+  }
+}
+extern void itoa( char* r, int x );
 
 void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 
@@ -216,13 +223,16 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
     }
 
     case 0x03 :{//FORK
-        PL011_putc( UART0, '[', true );
-        PL011_putc( UART0, 'F', true );
-        PL011_putc( UART0, 'O', true );
-        PL011_putc( UART0, 'R', true );
-        PL011_putc( UART0, 'K', true );
-        PL011_putc( UART0, ']', true );
+//         PL011_putc( UART0, '[', true );
+//         PL011_putc( UART0, 'F', true );
+//         PL011_putc( UART0, 'O', true );
+//         PL011_putc( UART0, 'R', true );
+//         PL011_putc( UART0, 'K', true );
+//         PL011_putc( UART0, ']', true );
 
+        //increase console priority
+        pcb[0].priority += 1;
+        
         //get next PCB
         pcb_t* child = getNextPCB();
 
@@ -231,7 +241,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 //            ctx->gpr[0] = current->pid;
             break;
         }
-
+        
         //clone parents processing context
         memcpy(&child->ctx, ctx, sizeof(ctx_t));
 
@@ -252,50 +262,60 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
     }
 
     case 0x04:{//EXIT
-        PL011_putc( UART0, '[', true );
-        PL011_putc( UART0, 'E', true );
-        PL011_putc( UART0, 'X', true );
-        PL011_putc( UART0, 'I', true );
-        PL011_putc( UART0, 'T', true );
-        PL011_putc( UART0, ']', true );
+//         PL011_putc( UART0, '[', true );
+//         PL011_putc( UART0, 'E', true );
+//         PL011_putc( UART0, 'X', true );
+//         PL011_putc( UART0, 'I', true );
+//         PL011_putc( UART0, 'T', true );
+//         PL011_putc( UART0, ']', true );
         pcb[current->pid].status = STATUS_TERMINATED;
         schedule(ctx);
+        pcb[0].priority -= 1;
+
         break;
     }
 
     case 0x05 :{//EXEC
-      PL011_putc( UART0, '[', true );
-      PL011_putc( UART0, 'E', true );
-      PL011_putc( UART0, 'X', true );
-      PL011_putc( UART0, 'E', true );
-      PL011_putc( UART0, 'C', true );
-      PL011_putc( UART0, ']', true );
+//       PL011_putc( UART0, '[', true );
+//       PL011_putc( UART0, 'E', true );
+//       PL011_putc( UART0, 'X', true );
+//       PL011_putc( UART0, 'E', true );
+//       PL011_putc( UART0, 'C', true );
+//       PL011_putc( UART0, ']', true );
       //set return values
+      current->priority = 1;
       ctx->pc = ctx->gpr[0];
       break;
     }
     case 0x06 :{//KILL
-      PL011_putc( UART0, '[', true );
-      PL011_putc( UART0, 'K', true );
-      PL011_putc( UART0, 'I', true );
-      PL011_putc( UART0, 'L', true );
-      PL011_putc( UART0, 'L', true );
-      PL011_putc( UART0, ']', true );
+//       PL011_putc( UART0, '[', true );
+//       PL011_putc( UART0, 'K', true );
+//       PL011_putc( UART0, 'I', true );
+//       PL011_putc( UART0, 'L', true );
+//       PL011_putc( UART0, 'L', true );
+//       PL011_putc( UART0, ']', true );
 
       int pid = ctx->gpr[0];
-      if(pid >= 0 && pid < 20){
-          pcb[pid].status = STATUS_TERMINATED;
-          schedule(ctx);
+      if(pid == -1){
+          for(int i = 1; i < 20; i++){
+            pcb[i].status = STATUS_TERMINATED;
+          }
+          pcb[0].priority = 2;
       }
+      else if(pid >= 0 && pid < 20){
+          pcb[pid].status = STATUS_TERMINATED;
+          pcb[0].priority -= 1;
+      }
+      schedule(ctx);
       break;
     }
   case 0x07 :{//NICE
-      PL011_putc( UART0, '[', true );
-      PL011_putc( UART0, 'N', true );
-      PL011_putc( UART0, 'I', true );
-      PL011_putc( UART0, 'C', true );
-      PL011_putc( UART0, 'E', true );
-      PL011_putc( UART0, ']', true );
+//       PL011_putc( UART0, '[', true );
+//       PL011_putc( UART0, 'N', true );
+//       PL011_putc( UART0, 'I', true );
+//       PL011_putc( UART0, 'C', true );
+//       PL011_putc( UART0, 'E', true );
+//       PL011_putc( UART0, ']', true );
         
       int pid = ctx->gpr[0];
       int priority = ctx->gpr[1];
@@ -305,14 +325,26 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
       }
       break;
     }
-//       PL011_putc( UART1, '[', true );
-//       PL011_putc( UART0, 'N', true );
-//       PL011_putc( UART0, 'I', true );
-//       PL011_putc( UART0, 'C', true );
-//       PL011_putc( UART0, 'E', true );
-//       PL011_putc( UART0, ']', true );
+      case 0x08:{//PS
+          print_to_console("\n\tPID\tPRIORITY\n", 16);
+          for(int i = 0; i < 20; i++){
+              if(pcb[i].status != STATUS_TERMINATED){
+                char pid[2];
+                char priority[2];
+                itoa(pid, pcb[i].pid);
+                itoa(priority, pcb[i].priority);
+                print_to_console("\t", 1);
+                print_to_console(pid, 2);
+                print_to_console("\t", 1);
+                print_to_console(priority, 2);
+                print_to_console("\n", 1);
+              }
+          }
+          print_to_console("\n", 1);
 
-//     }
+          break;
+
+      }
 
     default   : { // 0x?? => unknown/unsupported
       break;

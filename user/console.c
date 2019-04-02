@@ -104,16 +104,25 @@ void main_console() {
         exec( load( p ) );
       }
     }
-    if (0 == strcmp(p, "nice")){
+    else if (0 == strcmp(p, "nice")){
         int pid = atoi(strtok( NULL, " " ));
         int priority = atoi(strtok( NULL, " " ));
         nice(pid, priority);
     }
     else if( 0 == strcmp( p, "terminate" ) ) {
-      pid_t pid = atoi( strtok( NULL, " " ) );
-      int   s   = atoi( strtok( NULL, " " ) );
-
-      kill( pid, s );
+        char* pid = strtok( NULL, " " );
+        int   s   = atoi( strtok( NULL, " " ) );
+        //if terminate all processes
+        if(0 == strcmp(pid, "-a")){
+            kill(-1, s);  
+        }
+        //else specific process
+        else {
+            kill( atoi(pid), s );
+        }
+    } 
+    else if( 0 == strcmp( p, "ps" ) ) {
+      ps();
     } 
     else {
       puts( "unknown command\n", 16 );

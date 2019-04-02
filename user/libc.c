@@ -172,6 +172,13 @@ void sem_wait(const void * x ) {
   return;
 }
 
+void ps() {
+      asm volatile( "svc %0     \n" // make system call SYS_PS
+                   :
+                   : "I" (SYS_PS));
+  return;
+}
+
 void sem_post (const void * x ) {
     asm volatile("ldrex r1, [ %0 ] \n"//s'= MEM[ &s ]
                  "add    r1, r1, #1 \n"//s'= s'+ 1

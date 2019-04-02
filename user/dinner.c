@@ -14,6 +14,7 @@ int getRightChopstick(int id){
 
 
 void main_dinner (){
+    write( STDOUT_FILENO, "Loading the Dining Philosophers...\n", 34);
 
     //create child processes (the philosophers)
     for(int i = 0; i<16; i++){
@@ -22,12 +23,16 @@ void main_dinner (){
 
             //give unique id to each philosopher (first init all even IDs then odds)
             int id = (i<8) ? i*2 : 2*(i-8) + 1;
-
+            char p[2];
+            itoa(p, id);
+            write( STDOUT_FILENO, "Philosopher ", 12);
+            write( STDOUT_FILENO, p, 2);
+            write( STDOUT_FILENO, " has sat down for dinner\n", 26 );
+            
             //solution to dining philosophers problem
             while(1){
 
-                char p[2];
-                itoa(p, id);
+
 
                 sleep(id);
 
