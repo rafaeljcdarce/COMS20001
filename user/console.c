@@ -103,7 +103,12 @@ void main_console() {
         p = strtok( NULL, " " );
         exec( load( p ) );
       }
-    } 
+    }
+    if (0 == strcmp(p, "nice")){
+        int pid = atoi(strtok( NULL, " " ));
+        int priority = atoi(strtok( NULL, " " ));
+        nice(pid, priority);
+    }
     else if( 0 == strcmp( p, "terminate" ) ) {
       pid_t pid = atoi( strtok( NULL, " " ) );
       int   s   = atoi( strtok( NULL, " " ) );

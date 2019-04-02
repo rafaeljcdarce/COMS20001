@@ -11,6 +11,21 @@
 pcb_t pcb[20];
 pcb_t* current = NULL;
 int process_count = 0;
+void printContextSwitch(int prev, int next){
+    PL011_putc( UART0, '\n', true );
+    PL011_putc( UART0, 'S', true );
+    PL011_putc( UART0, 'W', true );
+    PL011_putc( UART0, 'I', true );
+    PL011_putc( UART0, 'T', true );
+    PL011_putc( UART0, 'C', true );
+    PL011_putc( UART0, 'H', true );
+    PL011_putc( UART0, ' ', true );
+    PL011_putc( UART0, 'A' + prev, true );
+    PL011_putc( UART0, '-', true );
+    PL011_putc( UART0, '>', true );
+    PL011_putc( UART0, 'A'+ next, true );
+    PL011_putc( UART0, '\n', true );
+}
 
 void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
 
@@ -23,12 +38,9 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
 
   current = next;                             // update   executing index   to P_{next}
 
-  PL011_putc( UART0, '[', true );
-  PL011_putc( UART0, 'A' + prev->pid, true );
-  PL011_putc( UART0, '-', true );
-  PL011_putc( UART0, '>', true );
-  PL011_putc( UART0, 'A' + next->pid, true );
-  PL011_putc( UART0, ']', true );
+    
+  //printContextSwitch(prev->pid, next->pid);
+
 
   if(prev->status == STATUS_EXECUTING) prev->status = STATUS_READY;
   next->status = STATUS_EXECUTING;
@@ -120,7 +132,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
     pcb[ i ].ctx.cpsr = 0x50;
     pcb[ i ].ctx.sp   = ( uint32_t )(&tos_user) - (i*0x00001000);
     pcb[ i ].tos   = pcb[ i ].ctx.sp;
-    pcb[ i].priority      = 1;
+    pcb[ i].priority      = 32;
     pcb[ i ].age      = 0;
     process_count+=1;
   }
@@ -129,7 +141,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   dispatch( ctx, NULL, &pcb[ 0 ] );
 
   //Enable timer interrupts
-  TIMER0->Timer1Load  = 0x00100000; // select period = 2^20 ticks ~= 1 sec
+  TIMER0->Timer1Load  = 0x00040000; // select period = 2^18 ticks ~= 1/4 sec
   TIMER0->Timer1Ctrl  = 0x00000002; // select 32-bit   timer
   TIMER0->Timer1Ctrl |= 0x00000040; // select periodic timer
   TIMER0->Timer1Ctrl |= 0x00000020; // enable          timer interrupt
@@ -246,10 +258,8 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
         PL011_putc( UART0, 'I', true );
         PL011_putc( UART0, 'T', true );
         PL011_putc( UART0, ']', true );
-        pcb_t* target = getPCB(current->pid);
-        if(target!=NULL) target->status = STATUS_TERMINATED;
+        pcb[current->pid].status = STATUS_TERMINATED;
         schedule(ctx);
-
         break;
     }
 
@@ -262,8 +272,6 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
       PL011_putc( UART0, ']', true );
       //set return values
       ctx->pc = ctx->gpr[0];
-      //current->ctx.sp = current.tos;
-      //dispatch(ctx, current, current);
       break;
     }
     case 0x06 :{//KILL
@@ -274,11 +282,37 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
       PL011_putc( UART0, 'L', true );
       PL011_putc( UART0, ']', true );
 
-      pcb_t* target = getPCB((pid_t)ctx->gpr[0]);
-      if(target!=NULL) target->status = STATUS_TERMINATED;
+      int pid = ctx->gpr[0];
+      if(pid >= 0 && pid < 20){
+          pcb[pid].status = STATUS_TERMINATED;
+          schedule(ctx);
+      }
       break;
     }
+  case 0x07 :{//NICE
+      PL011_putc( UART0, '[', true );
+      PL011_putc( UART0, 'N', true );
+      PL011_putc( UART0, 'I', true );
+      PL011_putc( UART0, 'C', true );
+      PL011_putc( UART0, 'E', true );
+      PL011_putc( UART0, ']', true );
+        
+      int pid = ctx->gpr[0];
+      int priority = ctx->gpr[1];
+      if(pid >= 0 && pid < 20 && priority >= 0 && priority <= 20){
+          pcb[pid].priority = priority;
+          schedule(ctx);
+      }
+      break;
+    }
+//       PL011_putc( UART1, '[', true );
+//       PL011_putc( UART0, 'N', true );
+//       PL011_putc( UART0, 'I', true );
+//       PL011_putc( UART0, 'C', true );
+//       PL011_putc( UART0, 'E', true );
+//       PL011_putc( UART0, ']', true );
 
+//     }
 
     default   : { // 0x?? => unknown/unsupported
       break;

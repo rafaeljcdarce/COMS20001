@@ -54,7 +54,7 @@ void itoa( char* r, int x ) {
 }
 
 void sleep (int s){
-  for(int i = 0; i<(0x10000000); i++){
+  for(int i = 0; i<0x10000000; i++){
     asm volatile("nop");
   }
 }
