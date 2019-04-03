@@ -85,5 +85,7 @@ typedef struct {
 
 #include "lolevel.h"
 #include     "int.h"
+#include "libc.h"
+
 
 #endif

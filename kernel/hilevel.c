@@ -6,9 +6,20 @@
  */
 
 #include "hilevel.h"
+// query the disk block count
+extern int disk_get_block_num();
+// query the disk block length
+extern int disk_get_block_len();
 
+// write an n-byte block of data x to   the disk at block address a
+extern int disk_wr( uint32_t a, const uint8_t* x, int n );
+// read  an n-byte block of data x from the disk at block address a
+extern int disk_rd( uint32_t a,       uint8_t* x, int n );
 //max 20 including console
 pcb_t pcb[20];
+uint32_t file_table = 0x00000001;
+int file_table_size = 8;
+uint32_t start_of_file[8] = {0x00000009, 0x00000009+32, 0x00000009+(32*2), 0x00000009+(32*3), 0x00000009+(32*4), 0x00000009+(32*5), 0x00000009+(32*6), 0x00000009+(32*7)};
 pcb_t* current = NULL;
 int process_count = 0;
 void printContextSwitch(int prev, int next){
@@ -99,7 +110,12 @@ void schedule( ctx_t* ctx ) {
 extern void     main_console();
 extern uint32_t tos_user;
 
-
+void print_to_console( char* x, int n ) {
+  for( int i = 0; i < n; i++ ) {
+    PL011_putc( UART1, x[ i ], true );
+  }
+}
+extern void itoa( char* r, int x );
 
 
 void hilevel_handler_rst( ctx_t* ctx ) {
@@ -112,6 +128,8 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   PL011_putc( UART0, 'T', true );
 
   PL011_putc( UART0, ']', true );
+
+
 
 // create console process
   memset( &pcb[ 0 ], 0, sizeof( pcb_t ) );
@@ -154,6 +172,18 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   GICD0->CTLR         = 0x00000001; // enable GIC distributor
 
   int_enable_irq();
+    for(int i = 0; i<8; i++){
+           disk_wr(0x00000001+i, "0000000000000000", 16);
+    }
+   disk_wr(0x00000003, "text.txt\0\0\0\0\0\0\0\0", 16);
+
+
+
+//     uint8_t* data;
+//     disk_rd(0x00000001, data, 16);
+//     print_to_console((char *)data, 16);
+//     disk_rd(0x00000002, data, 16);
+//     print_to_console((char *)data, 16);
   return;
 }
 
@@ -182,12 +212,7 @@ void hilevel_handler_irq(ctx_t* ctx) {
 
   return;
 }
-void print_to_console( char* x, int n ) {
-  for( int i = 0; i < n; i++ ) {
-    PL011_putc( UART1, x[ i ], true );
-  }
-}
-extern void itoa( char* r, int x );
+
 
 void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 
@@ -345,6 +370,23 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
           break;
 
       }
+    case 0x09:{//PS
+          print_to_console("\n", 1);
+          for(int i = 0; i < file_table_size; i++){
+              uint8_t* file;
+              disk_rd(0x00000001+i, file, 16);
+              //if not empty
+              if(0 != strcmp(file,"0000000000000000")){
+                print_to_console(file, 16);
+                print_to_console("\n", 1);
+              }
+          }
+          print_to_console("\n", 1);
+          break;
+
+      }
+          
+          
 
     default   : { // 0x?? => unknown/unsupported
       break;

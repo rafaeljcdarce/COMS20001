@@ -121,6 +121,9 @@ void main_console() {
             kill( atoi(pid), s );
         }
     } 
+    else if( 0 == strcmp( p, "ls" ) ) {
+        ls();
+    } 
     else if( 0 == strcmp( p, "ps" ) ) {
       ps();
     } 
