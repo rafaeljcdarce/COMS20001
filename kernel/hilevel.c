@@ -6,6 +6,9 @@
  */
 
 #include "hilevel.h"
+extern void     main_console();
+extern uint32_t tos_user;
+
 // query the disk block count
 extern int disk_get_block_num();
 // query the disk block length
@@ -15,13 +18,42 @@ extern int disk_get_block_len();
 extern int disk_wr( uint32_t a, const uint8_t* x, int n );
 // read  an n-byte block of data x from the disk at block address a
 extern int disk_rd( uint32_t a,       uint8_t* x, int n );
+extern void itoa( char* r, int x );
+
 //max 20 including console
 pcb_t pcb[20];
-uint32_t file_table = 0x00000001;
-int file_table_size = 8;
-uint32_t start_of_file[8] = {0x00000009, 0x00000009+32, 0x00000009+(32*2), 0x00000009+(32*3), 0x00000009+(32*4), 0x00000009+(32*5), 0x00000009+(32*6), 0x00000009+(32*7)};
 pcb_t* current = NULL;
 int process_count = 0;
+
+//file system
+uint32_t file_table = 0x00000001;
+int file_table_size = 8;
+uint8_t* empty_block = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
+uint32_t start_of_file[8] = {0x00000009, 0x00000009+32, 0x00000009+(32*2), 0x00000009+(32*3), 0x00000009+(32*4), 0x00000009+(32*5), 0x00000009+(32*6), 0x00000009+(32*7)};
+int len(char * s){
+    if(s == NULL) return -1;
+    if(s == "") return 0;
+    int i = 0;
+    while(s[i]!='\0')i++;
+    return i;
+}
+
+uint32_t getFile (char * file_name){
+    for(int i = 0; i < file_table_size; i++){
+      uint8_t* file_block;
+      disk_rd(file_table+i, file_block, 16);
+      if(0 == strcmp(file_block, file_name)) return start_of_file[i];
+    }
+    return 0x00000000;
+}
+uint32_t getNextFile(){
+    for(int i = 0; i < file_table_size; i++){
+      uint8_t* file_block;
+      disk_rd(file_table+i, file_block, 16);
+      if(0 == strcmp(file_block, empty_block)) return file_table + i;
+    }
+    return 0x00000000;
+}
 void printContextSwitch(int prev, int next){
     PL011_putc( UART0, '\n', true );
     PL011_putc( UART0, 'S', true );
@@ -107,16 +139,11 @@ void schedule( ctx_t* ctx ) {
   return;
 }
 
-extern void     main_console();
-extern uint32_t tos_user;
-
 void print_to_console( char* x, int n ) {
   for( int i = 0; i < n; i++ ) {
     PL011_putc( UART1, x[ i ], true );
   }
 }
-extern void itoa( char* r, int x );
-
 
 void hilevel_handler_rst( ctx_t* ctx ) {
 
@@ -173,7 +200,7 @@ void hilevel_handler_rst( ctx_t* ctx ) {
 
   int_enable_irq();
     for(int i = 0; i<8; i++){
-           disk_wr(0x00000001+i, "0000000000000000", 16);
+           disk_wr(0x00000001+i, empty_block, 16);
     }
    disk_wr(0x00000003, "text.txt\0\0\0\0\0\0\0\0", 16);
 
@@ -213,9 +240,7 @@ void hilevel_handler_irq(ctx_t* ctx) {
   return;
 }
 
-
 void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
-
 
 // #define SYS_YIELD     ( 0x00 )
 // #define SYS_WRITE     ( 0x01 )
@@ -225,6 +250,10 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 // #define SYS_EXEC      ( 0x05 )
 // #define SYS_KILL      ( 0x06 )
 // #define SYS_NICE      ( 0x07 )
+  
+  char ids[2];
+  itoa(ids, id);
+  print_to_console(ids, 2);
   switch( id ) {
     case 0x00 : { // 0x00 => yield()
       schedule( ctx );
@@ -350,46 +379,92 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
       }
       break;
     }
-      case 0x08:{//PS
-          print_to_console("\n\tPID\tPRIORITY\n", 16);
-          for(int i = 0; i < 20; i++){
-              if(pcb[i].status != STATUS_TERMINATED){
-                char pid[2];
-                char priority[2];
-                itoa(pid, pcb[i].pid);
-                itoa(priority, pcb[i].priority);
-                print_to_console("\t", 1);
-                print_to_console(pid, 2);
-                print_to_console("\t", 1);
-                print_to_console(priority, 2);
-                print_to_console("\n", 1);
-              }
+  case 0x08:{//PS
+      print_to_console("\n\tPID\tPRIORITY\n", 16);
+      for(int i = 0; i < 20; i++){
+          if(pcb[i].status != STATUS_TERMINATED){
+            char pid[2];
+            char priority[2];
+            itoa(pid, pcb[i].pid);
+            itoa(priority, pcb[i].priority);
+            print_to_console("\t", 1);
+            print_to_console(pid, 2);
+            print_to_console("\t", 1);
+            print_to_console(priority, 2);
+            print_to_console("\n", 1);
           }
-          print_to_console("\n", 1);
-
-          break;
-
       }
-    case 0x09:{//PS
-          print_to_console("\n", 1);
+      print_to_console("\n", 1);
+
+      break;
+
+  }
+    case 0x09:{//LS
           for(int i = 0; i < file_table_size; i++){
               uint8_t* file;
               disk_rd(0x00000001+i, file, 16);
               //if not empty
-              if(0 != strcmp(file,"0000000000000000")){
+              if(0 != strcmp(file, (char *)empty_block)){
                 print_to_console(file, 16);
                 print_to_console("\n", 1);
               }
           }
-          print_to_console("\n", 1);
           break;
 
       }
-          
-          
+      case 0x0A :{//CAT
 
+          int mode = (int)ctx->gpr[0];
+          char* file = (char *)ctx->gpr[1];
+          char* string = (char *)ctx->gpr[2];
+          int l = len(string);
+
+          //default mode (output file contents)
+          if(mode == 0){
+              uint32_t file_location = getFile(file);
+              if(file_location==0x00000000){
+                  print_to_console("file does not exist\n", 20);
+                  break;
+              }
+              else{
+                  for(int i = 0; i < 32; i ++){
+          
+                      if(i*16 < l){
+                        uint8_t* body;
+                        disk_rd(file_location+i, body, 16);
+                        print_to_console(body, 16);
+                      }
+                      else break;
+                      
+                  }
+                  print_to_console("\n", 1);
+
+              }
+          }
+              
+          //create file mode
+          else if(mode == 1){
+              uint32_t file_location = getNextFile();
+              if(file_location==0x00000000){
+                  print_to_console("file space full\n", 16);
+                  break;
+              }
+              else{
+                  for(int i = 0; i<32; i++){
+                      uint8_t block[16] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+                      for(int j = 0; i < 16; i++){
+                          int c = (i*16) + j;
+                          if(c < l) block[j] = string[c];
+                      }
+                      disk_wr(file_location+i, (uint8_t*) &block, 16);
+                  }
+              }
+          }
+          break;
+      }
+       
     default   : { // 0x?? => unknown/unsupported
-      break;
+        break;
     }
   }
 

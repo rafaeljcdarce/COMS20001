@@ -127,6 +127,9 @@ void main_console() {
     else if( 0 == strcmp( p, "ps" ) ) {
       ps();
     } 
+    else if( 0 == strcmp( p, "cat" ) ) {
+      //cat();
+    } 
     else {
       puts( "unknown command\n", 16 );
     }

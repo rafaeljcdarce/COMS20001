@@ -173,14 +173,14 @@ void sem_wait(const void * x ) {
 }
 
 void ps() {
-      asm volatile( "svc %0     \n" // make system call SYS_PS
+      asm volatile( "svc %0\n" // make system call SYS_PS
                    :
                    : "I" (SYS_PS));
   return;
 }
 
 void ls() {
-      asm volatile( "svc %0     \n" // make system call SYS_PS
+      asm volatile( "svc %0\n" // make system call LS
                    :
                    : "I" (SYS_LS));
   return;
