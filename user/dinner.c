@@ -12,13 +12,12 @@ int getRightChopstick(int id){
     return id+1;
 }
 
-
 void main_dinner (){
     write( STDOUT_FILENO, "Loading the Dining Philosophers...\n", 34);
 
     //create child processes (the philosophers)
     for(int i = 0; i<16; i++){
-        
+
         if(fork() == 0){
 
             //give unique id to each philosopher (first init all even IDs then odds)
@@ -28,19 +27,15 @@ void main_dinner (){
             write( STDOUT_FILENO, "Philosopher ", 12);
             write( STDOUT_FILENO, p, 2);
             write( STDOUT_FILENO, " has sat down for dinner\n", 26 );
-            
+
             //solution to dining philosophers problem
             while(1){
-
-
 
                 sleep(id);
 
                 write( STDOUT_FILENO, "Philosopher ", 12);
                 write( STDOUT_FILENO, p, 2);
                 write( STDOUT_FILENO, " is waiting\n", 12 );
-
-
 
                 //wait for chopstick lock
                 sem_wait(&chopstick_lock);
@@ -65,8 +60,6 @@ void main_dinner (){
                     continue;
                 }
 
-
-
                 //eat food
                 write( STDOUT_FILENO, "Philosopher ", 12);
                 write( STDOUT_FILENO, p, 2);
@@ -87,7 +80,6 @@ void main_dinner (){
                 write( STDOUT_FILENO, p, 2);
                 write( STDOUT_FILENO, " put down both chopsticks\n", 26 );
             }
-
         }
     }
     exit( EXIT_SUCCESS );

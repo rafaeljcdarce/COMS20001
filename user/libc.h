@@ -40,6 +40,9 @@ typedef int pid_t;
 #define SYS_NICE      ( 0x07 )
 #define SYS_PS        ( 0x08 )
 #define SYS_LS        ( 0x09 )
+#define SYS_CAT       ( 0x0A )
+#define SYS_WC       ( 0x0B )
+#define SYS_RM       ( 0x0C )
 
 #define SIG_TERM      ( 0x00 )
 #define SIG_QUIT      ( 0x01 )
@@ -66,6 +69,7 @@ extern int  read( int fd,       void* x, size_t n );
 
 // perform fork, returning 0 iff. child or > 0 iff. parent process
 extern int  fork();
+
 // perform exit, i.e., terminate process with status x
 extern void exit(       int   x );
 // perform exec, i.e., start executing program at address x
@@ -76,10 +80,11 @@ extern int  kill( pid_t pid, int x );
 // for process identified by pid, set  priority to x
 extern void nice( pid_t pid, int x );
 extern void ps();
-
 extern void ls();
+extern void cat();
+extern void rm();
+extern void wc();
 extern void sem_post( const void* x );
 extern void sem_wait( const void* x );
 extern void sleep(int x);
-
 #endif

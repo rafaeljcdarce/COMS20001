@@ -28,8 +28,8 @@ int process_count = 0;
 //file system
 uint32_t file_table = 0x00000001;
 int file_table_size = 8;
-uint8_t* empty_block = "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0";
-uint32_t start_of_file[8] = {0x00000009, 0x00000009+32, 0x00000009+(32*2), 0x00000009+(32*3), 0x00000009+(32*4), 0x00000009+(32*5), 0x00000009+(32*6), 0x00000009+(32*7)};
+uint8_t* empty_block = "0000000000000000";
+
 int len(char * s){
     if(s == NULL) return -1;
     if(s == "") return 0;
@@ -38,22 +38,70 @@ int len(char * s){
     return i;
 }
 
+void print_to_console( char* x, int n ) {
+  for( int i = 0; i < n; i++ ) {
+    PL011_putc( UART1, x[ i ], true );
+  }
+}
+
+int getExistingFile (char* file_name){
+  for(int i = 0; i < file_table_size; i++){
+      uint8_t file[16];
+      disk_rd(0x00000001+i, (uint8_t *) &file, 16);
+      if(strcmp(file, file_name) == 0){
+         return 0x00000001 + i;
+      }
+    }
+    return 0x00000000;
+}
+
 uint32_t getFile (char * file_name){
-    for(int i = 0; i < file_table_size; i++){
-      uint8_t* file_block;
-      disk_rd(file_table+i, file_block, 16);
-      if(0 == strcmp(file_block, file_name)) return start_of_file[i];
+  for(int i = 0; i < file_table_size; i++){
+      uint8_t file[16];
+      disk_rd(0x00000001+i, (uint8_t *) &file, 16);
+      if(strcmp(file, file_name) == 0){
+         return 0x00000009 + (32*i);
+      }
     }
     return 0x00000000;
 }
+
+int getFileSize (char * file_name){
+  for(int i = 0; i < file_table_size; i++){
+      uint8_t file[16];
+      disk_rd(0x00000001+i, (uint8_t *) &file, 16);
+      if(strcmp(file, file_name) == 0){
+        uint8_t block[16];
+        disk_rd(0x0000010E + i, (uint8_t *) &block, 16);
+        return atoi(block);
+      }
+    }
+    return -1;
+}
+
+int getFileSizeLocation (char * file_name){
+  for(int i = 0; i < file_table_size; i++){
+      uint8_t file[16];
+      disk_rd(0x00000001+i, (uint8_t *) &file, 16);
+      if(strcmp(file, file_name) == 0){
+        return 0x0000010E + i;
+      }
+    }
+    return 0x00000000;
+}
+
 uint32_t getNextFile(){
-    for(int i = 0; i < file_table_size; i++){
-      uint8_t* file_block;
-      disk_rd(file_table+i, file_block, 16);
-      if(0 == strcmp(file_block, empty_block)) return file_table + i;
+
+  for(int i = 0; i < file_table_size; i++){
+      uint8_t file[16];
+      disk_rd(0x00000001+i, (uint8_t *) &file, 16);
+      if(file[0] == '0'){
+         return 0x00000001+i;
+      }
     }
     return 0x00000000;
 }
+
 void printContextSwitch(int prev, int next){
     PL011_putc( UART0, '\n', true );
     PL011_putc( UART0, 'S', true );
@@ -78,10 +126,8 @@ void dispatch( ctx_t* ctx, pcb_t* prev, pcb_t* next ) {
   if( NULL != next ) {
     memcpy( ctx, &next->ctx, sizeof( ctx_t ) ); // restore  execution context of P_{next}
   }
-
   current = next;                             // update   executing index   to P_{next}
 
-    
   //printContextSwitch(prev->pid, next->pid);
     PL011_putc( UART0, '\n', true );
 
@@ -139,12 +185,6 @@ void schedule( ctx_t* ctx ) {
   return;
 }
 
-void print_to_console( char* x, int n ) {
-  for( int i = 0; i < n; i++ ) {
-    PL011_putc( UART1, x[ i ], true );
-  }
-}
-
 void hilevel_handler_rst( ctx_t* ctx ) {
 
   PL011_putc( UART0, '[', true );
@@ -199,18 +239,10 @@ void hilevel_handler_rst( ctx_t* ctx ) {
   GICD0->CTLR         = 0x00000001; // enable GIC distributor
 
   int_enable_irq();
-    for(int i = 0; i<8; i++){
-           disk_wr(0x00000001+i, empty_block, 16);
-    }
-   disk_wr(0x00000003, "text.txt\0\0\0\0\0\0\0\0", 16);
 
-
-
-//     uint8_t* data;
-//     disk_rd(0x00000001, data, 16);
-//     print_to_console((char *)data, 16);
-//     disk_rd(0x00000002, data, 16);
-//     print_to_console((char *)data, 16);
+  for(int i = 0; i<8; i++){
+         disk_wr(0x00000001+i, empty_block, 16);
+  }
   return;
 }
 
@@ -250,10 +282,8 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 // #define SYS_EXEC      ( 0x05 )
 // #define SYS_KILL      ( 0x06 )
 // #define SYS_NICE      ( 0x07 )
-  
-  char ids[2];
-  itoa(ids, id);
-  print_to_console(ids, 2);
+
+
   switch( id ) {
     case 0x00 : { // 0x00 => yield()
       schedule( ctx );
@@ -286,7 +316,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 
         //increase console priority
         pcb[0].priority += 1;
-        
+
         //get next PCB
         pcb_t* child = getNextPCB();
 
@@ -295,7 +325,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 //            ctx->gpr[0] = current->pid;
             break;
         }
-        
+
         //clone parents processing context
         memcpy(&child->ctx, ctx, sizeof(ctx_t));
 
@@ -370,7 +400,7 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 //       PL011_putc( UART0, 'C', true );
 //       PL011_putc( UART0, 'E', true );
 //       PL011_putc( UART0, ']', true );
-        
+
       int pid = ctx->gpr[0];
       int priority = ctx->gpr[1];
       if(pid >= 0 && pid < 20 && priority >= 0 && priority <= 20){
@@ -380,14 +410,13 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
       break;
     }
   case 0x08:{//PS
-      print_to_console("\n\tPID\tPRIORITY\n", 16);
+      print_to_console("\nPID\tPRIORITY\n", 16);
       for(int i = 0; i < 20; i++){
           if(pcb[i].status != STATUS_TERMINATED){
             char pid[2];
             char priority[2];
             itoa(pid, pcb[i].pid);
             itoa(priority, pcb[i].priority);
-            print_to_console("\t", 1);
             print_to_console(pid, 2);
             print_to_console("\t", 1);
             print_to_console(priority, 2);
@@ -401,13 +430,15 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
   }
     case 0x09:{//LS
           for(int i = 0; i < file_table_size; i++){
-              uint8_t* file;
-              disk_rd(0x00000001+i, file, 16);
+              uint8_t file[16];
+              disk_rd(0x00000001+i, (uint8_t *) &file, 16);
+
               //if not empty
-              if(0 != strcmp(file, (char *)empty_block)){
+              if(file[0] != '0'){
                 print_to_console(file, 16);
                 print_to_console("\n", 1);
               }
+
           }
           break;
 
@@ -416,53 +447,85 @@ void hilevel_handler_svc( ctx_t* ctx, uint32_t id) {
 
           int mode = (int)ctx->gpr[0];
           char* file = (char *)ctx->gpr[1];
-          char* string = (char *)ctx->gpr[2];
-          int l = len(string);
+          char* body = (char *)ctx->gpr[2];
+          int l_file = len(file);
+          int l_body = len(body);
 
-          //default mode (output file contents)
+          //output file body
           if(mode == 0){
-              uint32_t file_location = getFile(file);
-              if(file_location==0x00000000){
-                  print_to_console("file does not exist\n", 20);
-                  break;
+            uint32_t location = getFile(file);
+            if(location == 0x00000000) print_to_console("no such file exists\n", 20);
+            else{
+              for(int i = 0; i<32; i++){
+                uint8_t body[16];
+                disk_rd(location+i, (uint8_t *) &body, 16);
+                print_to_console(body, 16);
               }
-              else{
-                  for(int i = 0; i < 32; i ++){
-          
-                      if(i*16 < l){
-                        uint8_t* body;
-                        disk_rd(file_location+i, body, 16);
-                        print_to_console(body, 16);
-                      }
-                      else break;
-                      
-                  }
-                  print_to_console("\n", 1);
+              print_to_console("\n", 1);
+            }
 
-              }
           }
-              
-          //create file mode
+          //create new file with body
           else if(mode == 1){
-              uint32_t file_location = getNextFile();
-              if(file_location==0x00000000){
-                  print_to_console("file space full\n", 16);
-                  break;
-              }
-              else{
-                  for(int i = 0; i<32; i++){
-                      uint8_t block[16] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
-                      for(int j = 0; i < 16; i++){
-                          int c = (i*16) + j;
-                          if(c < l) block[j] = string[c];
-                      }
-                      disk_wr(file_location+i, (uint8_t*) &block, 16);
-                  }
-              }
+
+            //check if existing
+            uint32_t location = getExistingFile(file);
+
+            //if not, find next availble sapce
+            if(location == 0x00000000) location = getNextFile();
+
+            if(location == 0x00000000) print_to_console("file space full\n", 16);
+            else{
+               uint8_t new_file_name[16] = {'\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0','\0'};
+               for(int i = 0; i < l_file; i++) new_file_name[i] = file[i];
+               disk_wr(location, (uint8_t *)&new_file_name, 16);
+
+               int byte = 0;
+               uint32_t body_location = getFile(file);
+               for(int i = 0; i<32; i++){
+                 uint8_t block[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+                 for(int j = 0; j<16; j++){
+                   if(byte < l_body){
+                     block[j] = body[byte];
+                   }
+                   byte++;
+                 }
+                 disk_wr(body_location+i, (uint8_t *)&block, 16);
+
+                 //save file size (e.g. l_body)
+                 uint8_t size[16];
+                 itoa(size, l_body);
+                 disk_wr(getFileSizeLocation(file), (uint8_t *)&size, 16);
+               }
+
+            }
+
           }
           break;
+
+    }
+    case 0x0B:{//WC
+      char* file = (char *)ctx->gpr[0];
+      int bytes = getFileSize(file);
+
+      if(bytes == -1){
+        print_to_console("no such file exists\n", 20);
+        break;
       }
-       
+
+      char b[3];
+      itoa(b, bytes);
+      print_to_console(b, 3);
+      print_to_console(" bytes\n", 7);
+      break;
+    }
+    case 0x0C:{//RM
+          char* file = (char *)ctx->gpr[0];
+          uint32_t location = getExistingFile(file);
+          if(location == 0x00000000) print_to_console("no such file exists\n", 20);
+          else disk_wr(location, empty_block, 16);
+          break;
+    }
     default   : { // 0x?? => unknown/unsupported
         break;
     }

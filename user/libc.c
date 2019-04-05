@@ -172,6 +172,20 @@ void sem_wait(const void * x ) {
   return;
 }
 
+void sem_post (const void * x ) {
+    asm volatile("ldrex r1, [ %0 ] \n"//s'= MEM[ &s ]
+                 "add    r1, r1, #1 \n"//s'= s'+ 1
+                 "strex r2, r1, [ %0 ] \n"//r <= MEM[ &s ] = s'
+                 "cmp    r2, #0 \n"// r  ?= 0
+                 "bne    sem_post \n"//if r  != 0, retry
+                 "dmb \n"//memory barrier
+                 "bx     lr \n"//return
+                 :
+                 :"r" (x)
+                 :"r0", "r1", "r2");
+  return;
+}
+
 void ps() {
       asm volatile( "svc %0\n" // make system call SYS_PS
                    :
@@ -186,17 +200,34 @@ void ls() {
   return;
 }
 
-void sem_post (const void * x ) {
-    asm volatile("ldrex r1, [ %0 ] \n"//s'= MEM[ &s ]
-                 "add    r1, r1, #1 \n"//s'= s'+ 1
-                 "strex r2, r1, [ %0 ] \n"//r <= MEM[ &s ] = s'
-                 "cmp    r2, #0 \n"// r  ?= 0
-                 "bne    sem_post \n"//if r  != 0, retry
-                 "dmb \n"//memory barrier
-                 "bx     lr \n"//return
-                 :
-                 :"r" (x)
-                 :"r0", "r1", "r2");
+void cat( int mode, char* file, char* body) {
+  asm volatile( "mov r0, %1 \n" // assign r0 =  mode
+                "mov r1, %2 \n" // assign r1 =    file
+                "mov r2, %3 \n" // assign r2 =    body
+                "svc %0     \n" // make system call
+              :
+              : "I" (SYS_CAT), "r" (mode), "r" (file), "r" (body)
+              : "r0", "r1", "r2" );
+
+  return;
+}
+
+void wc(char* file) {
+  asm volatile( "mov r0, %1 \n" // assign r0 =  mode
+                "svc %0     \n" // make system call
+              :
+              : "I" (SYS_WC), "r" (file)
+              : "r0");
+
+  return;
+}
+
+void rm(char* file) {
+  asm volatile( "mov r0, %1 \n" // assign r0 =  mode
+                "svc %0     \n" // make system call
+              :
+              : "I" (SYS_RM), "r" (file)
+              : "r0");
 
   return;
 }
